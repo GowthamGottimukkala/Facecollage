@@ -1,4 +1,4 @@
-import os,flask,glob
+import os,flask,glob,shutil
 from flask import request, redirect, url_for,render_template,send_file
 from werkzeug.utils import secure_filename
 from imutils import build_montages
@@ -30,7 +30,7 @@ def home():
         return send_file("Collage.jpg",mimetype='image/jpg')
 
 def aws(filename):
-    filename = "receivedimages/" + filename
+    filename =  filename
     with open('credentials.csv','r') as inp:
         next(inp)
         reader = csv.reader(inp)
@@ -44,9 +44,12 @@ def aws(filename):
         source_bytes = source_image.read()
 
     response = client.detect_faces(Image = {'Bytes':source_bytes},Attributes=['ALL']) 
-    count = 0
+    count = 5
     files = glob.glob('images/*')
-    for f in files:
+    files2 = glob.glob('newimages/*')
+    # for f in files:
+    #     os.remove(f)
+    for f in files2:
         os.remove(f)
     for facedetail in response["FaceDetails"]:
         point = facedetail["BoundingBox"]
@@ -56,16 +59,39 @@ def aws(filename):
         cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
         roi_color = image[y:y + h, x:x + w] 
         print("[INFO] Object found. Saving locally.") 
-
         cv2.imwrite("images/"+str(count)+'.jpg', roi_color) 
         count += 1
+
+    # comparing faces
+    num = 0
+    print(os.listdir("images"))
+    for test1 in os.listdir("images"):
+        with open("images/"+test1,'rb') as source_image:
+            source_bytes = source_image.read()
+        if(num==0):
+            shutil.copy(glob.glob("images/"+test1)[0], "newimages/")
+            num = 1
+        else:
+            match = 0
+            for test2 in os.listdir("newimages"):
+                with open("images/"+test2,'rb') as target_image:
+                    target_bytes = target_image.read()
+                response=client.compare_faces(SourceImage={'Bytes': source_bytes},TargetImage={'Bytes': target_bytes},SimilarityThreshold=80)
+                if(len(response["FaceMatches"])!=0):
+                    if(response["FaceMatches"][0]["Similarity"] > 90):
+                        match = 1
+                        break
+            if(match==0):
+                shutil.copy(glob.glob("images/"+test1)[0], "newimages/")
+
     images = []
-    for imagePath in os.listdir("images"):
-	    image = cv2.imread("images/"+imagePath)
+    for imagePath in os.listdir("newimages"):
+	    image = cv2.imread("newimages/"+imagePath)
 	    images.append(image)
     montages = build_montages(images, (128, 196), (7, 3))
     for montage in montages:
         cv2.imwrite("Collage.jpg",montage)
+  
 
 
 if __name__ == "__main__":
