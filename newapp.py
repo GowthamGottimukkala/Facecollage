@@ -1,5 +1,5 @@
-import os,flask
-from flask import request, redirect, url_for,render_template
+import os,flask,glob
+from flask import request, redirect, url_for,render_template,send_file
 from werkzeug.utils import secure_filename
 from imutils import build_montages
 from imutils import paths
@@ -15,7 +15,7 @@ app.config["DEBUG"] = True
 def fun():
     return render_template("index.html")  
 
-@app.route('/getImageDetails', methods=['GET','POST'])
+@app.route('/createCollage', methods=['GET','POST'])
 def home():
     if request.method == 'POST':
         if 'data' not in request.files:
@@ -27,11 +27,10 @@ def home():
             filename = secure_filename(file.filename)
             file.save(os.path.join("receivedimages/" + filename))
         aws(filename)
-        return '<img src="static/Collage.jpg">'
-
-
+        return send_file("Collage.jpg",mimetype='image/jpg')
 
 def aws(filename):
+    filename = "receivedimages/" + filename
     with open('credentials.csv','r') as inp:
         next(inp)
         reader = csv.reader(inp)
@@ -46,6 +45,9 @@ def aws(filename):
 
     response = client.detect_faces(Image = {'Bytes':source_bytes},Attributes=['ALL']) 
     count = 0
+    files = glob.glob('images/*')
+    for f in files:
+        os.remove(f)
     for facedetail in response["FaceDetails"]:
         point = facedetail["BoundingBox"]
         image = cv2.imread(filename)
@@ -54,6 +56,7 @@ def aws(filename):
         cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
         roi_color = image[y:y + h, x:x + w] 
         print("[INFO] Object found. Saving locally.") 
+
         cv2.imwrite("images/"+str(count)+'.jpg', roi_color) 
         count += 1
     images = []
@@ -62,7 +65,7 @@ def aws(filename):
 	    images.append(image)
     montages = build_montages(images, (128, 196), (7, 3))
     for montage in montages:
-        cv2.imwrite("static/Collage.jpg",montage)
+        cv2.imwrite("Collage.jpg",montage)
 
 
 if __name__ == "__main__":
